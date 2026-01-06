@@ -1,0 +1,61 @@
+# CoralConfig.cmake.in
+# Config file for the Coral package
+#
+# Usage from an external project:
+#   find_package(Coral REQUIRED)
+#   target_link_libraries(MyTarget PRIVATE Coral::Native)
+#
+# This file defines the following imported targets:
+#   Coral::Native - The Coral native static library
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Check for required C++ features
+if(NOT CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 17)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
+
+# Check for .NET SDK (required for managed code)
+find_program(DOTNET_EXE NAMES dotnet)
+if(NOT DOTNET_EXE)
+    message(WARNING "Coral: .NET SDK not found. Managed code functionality may not work.")
+else()
+    execute_process(
+        COMMAND ${DOTNET_EXE} --version
+        OUTPUT_VARIABLE _CORAL_DOTNET_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_CORAL_DOTNET_VERSION VERSION_LESS "9.0.0")
+        message(WARNING "Coral: .NET SDK version ${_CORAL_DOTNET_VERSION} found, but 9.0+ is recommended.")
+    endif()
+endif()
+
+# Import targets
+include("${CMAKE_CURRENT_LIST_DIR}/CoralTargets.cmake")
+
+# Provide package information
+set(CORAL_VERSION "@PROJECT_VERSION@")
+set(CORAL_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(CORAL_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(CORAL_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# Path to installed include directory
+set_and_check(CORAL_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+
+# Path to installed library directory
+set_and_check(CORAL_LIBRARY_DIR "@PACKAGE_CMAKE_INSTALL_LIBDIR@")
+
+# Indicate that package was found
+set(Coral_FOUND TRUE)
+
+# Check required components
+check_required_components(Coral)
+
+# Print status message
+if(NOT Coral_FIND_QUIETLY)
+    message(STATUS "Found Coral: ${CMAKE_CURRENT_LIST_DIR} (version \"${CORAL_VERSION}\")")
+endif()

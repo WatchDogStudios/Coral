@@ -1,0 +1,304 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "installDir": "${sourceDir}/install/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+            }
+        },
+        {
+            "name": "debug",
+            "displayName": "Debug",
+            "description": "Debug build with all symbols",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release",
+            "description": "Optimized release build",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CORAL_EXAMPLE": "OFF",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "relwithdebinfo",
+            "displayName": "Release with Debug Info",
+            "description": "Optimized build with debug symbols",
+            "inherits": "base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                "CORAL_EXAMPLE": "OFF",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "windows-msvc",
+            "displayName": "Windows MSVC",
+            "description": "Windows build using MSVC",
+            "inherits": "base",
+            "generator": "Visual Studio 17 2022",
+            "architecture": "x64",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "windows-ninja",
+            "displayName": "Windows Ninja",
+            "description": "Windows build using Ninja",
+            "inherits": "base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "linux-gcc",
+            "displayName": "Linux GCC",
+            "description": "Linux build using GCC",
+            "inherits": "base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "CMAKE_CXX_COMPILER": "g++",
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "linux-clang",
+            "displayName": "Linux Clang",
+            "description": "Linux build using Clang",
+            "inherits": "base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            },
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++",
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "macos",
+            "displayName": "macOS",
+            "description": "macOS build using Apple Clang",
+            "inherits": "base",
+            "generator": "Ninja Multi-Config",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        },
+        {
+            "name": "macos-xcode",
+            "displayName": "macOS Xcode",
+            "description": "macOS build using Xcode",
+            "inherits": "base",
+            "generator": "Xcode",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CORAL_EXAMPLE": "ON",
+                "CORAL_TESTING": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug",
+            "configuration": "Debug"
+        },
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "configuration": "Release"
+        },
+        {
+            "name": "relwithdebinfo",
+            "configurePreset": "relwithdebinfo",
+            "configuration": "RelWithDebInfo"
+        },
+        {
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc",
+            "configuration": "Release"
+        },
+        {
+            "name": "windows-ninja-debug",
+            "configurePreset": "windows-ninja",
+            "configuration": "Debug"
+        },
+        {
+            "name": "windows-ninja-release",
+            "configurePreset": "windows-ninja",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-gcc-debug",
+            "configurePreset": "linux-gcc",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-gcc-release",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release"
+        },
+        {
+            "name": "linux-clang-debug",
+            "configurePreset": "linux-clang",
+            "configuration": "Debug"
+        },
+        {
+            "name": "linux-clang-release",
+            "configurePreset": "linux-clang",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-release",
+            "configurePreset": "macos",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-xcode-debug",
+            "configurePreset": "macos-xcode",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-xcode-release",
+            "configurePreset": "macos-xcode",
+            "configuration": "Release"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "debug",
+            "configurePreset": "debug",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "release",
+            "configurePreset": "release",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "windows-msvc-debug",
+            "configurePreset": "windows-msvc",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "windows-msvc-release",
+            "configurePreset": "windows-msvc",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "linux-gcc-debug",
+            "configurePreset": "linux-gcc",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "linux-gcc-release",
+            "configurePreset": "linux-gcc",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        },
+        {
+            "name": "macos-release",
+            "configurePreset": "macos",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true,
+                "verbosity": "default"
+            }
+        }
+    ]
+}

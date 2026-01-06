@@ -12,6 +12,11 @@ option(CORAL_EXAMPLE "Build the example programs" OFF)
 option(CORAL_TESTING "Build the tests" ON)
 
 #------------------------------------------------------------------------------
+# CMake Module Path
+#------------------------------------------------------------------------------
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/modules")
+
+#------------------------------------------------------------------------------
 # Global Configuration (matches premake workspace settings)
 #------------------------------------------------------------------------------
 set(CMAKE_CXX_STANDARD 17)
@@ -29,10 +34,7 @@ add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 #------------------------------------------------------------------------------
 # .NET SDK Detection
 #------------------------------------------------------------------------------
-find_program(DOTNET_EXE NAMES dotnet)
-if(NOT DOTNET_EXE)
-    message(FATAL_ERROR "Failed to find .NET!")
-endif()
+find_program(DOTNET_EXE NAMES dotnet REQUIRED)
 
 execute_process(
     COMMAND ${DOTNET_EXE} --version
@@ -81,35 +83,25 @@ endif()
 message(STATUS "Found a suitable .NET runtime, version ${DOTNET_RTVER}")
 
 #------------------------------------------------------------------------------
+# Include DotNet Build Module
+#------------------------------------------------------------------------------
+include(DotNetBuild)
+
+#------------------------------------------------------------------------------
 # Paths
 #------------------------------------------------------------------------------
 set(CORAL_ROOT ${CMAKE_CURRENT_LIST_DIR}/..)
 get_filename_component(CORAL_ROOT "${CORAL_ROOT}" ABSOLUTE)
 
-#------------------------------------------------------------------------------
-# Coral.Managed Target (built via dotnet CLI)
-#------------------------------------------------------------------------------
-file(GLOB CORAL_MANAGED_SRC CONFIGURE_DEPENDS ${CORAL_ROOT}/Coral.Managed/Source/*.cs)
-
+# Common output directory for managed assemblies
 set(CORAL_MANAGED_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Build/$<CONFIG>)
 
-add_custom_command(
-    OUTPUT
-        ${CMAKE_BINARY_DIR}/Coral.Managed.dll.stamp
-    DEPENDS
-        ${CORAL_MANAGED_SRC}
-        ${CORAL_ROOT}/Coral.Managed/Coral.Managed-Static.csproj
-    WORKING_DIRECTORY ${CORAL_ROOT}/Coral.Managed
-    COMMENT "Building Coral.Managed"
-    VERBATIM
-    COMMAND ${DOTNET_EXE} build ${CORAL_ROOT}/Coral.Managed/Coral.Managed-Static.csproj
-            --configuration $<CONFIG>
-            --output ${CORAL_MANAGED_OUTPUT_DIR}
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/Coral.Managed.dll.stamp
-)
-
-add_custom_target(Coral.Managed
-    DEPENDS ${CMAKE_BINARY_DIR}/Coral.Managed.dll.stamp
+#------------------------------------------------------------------------------
+# Coral.Managed Target
+#------------------------------------------------------------------------------
+add_dotnet_library(Coral.Managed
+    CSPROJ ${CORAL_ROOT}/Coral.Managed/Coral.Managed-Static.csproj
+    OUTPUT_DIR ${CORAL_MANAGED_OUTPUT_DIR}
 )
 
 #------------------------------------------------------------------------------
@@ -117,7 +109,7 @@ add_custom_target(Coral.Managed
 #------------------------------------------------------------------------------
 add_library(Coral.Native STATIC)
 
-# Create alias for use with add_subdirectory
+# Create alias for use with add_subdirectory / FetchContent
 add_library(Coral::Native ALIAS Coral.Native)
 
 # Depend on managed assembly
@@ -209,25 +201,10 @@ if(CORAL_EXAMPLE)
     set(EXAMPLE_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Build/$<CONFIG>/Example)
 
     # Example.Managed
-    file(GLOB EXAMPLE_MANAGED_SRC CONFIGURE_DEPENDS ${EXAMPLE_ROOT}/Example.Managed/Source/*.cs)
-
-    add_custom_command(
-        OUTPUT ${CMAKE_BINARY_DIR}/Example.Managed.dll.stamp
-        DEPENDS
-            ${EXAMPLE_MANAGED_SRC}
-            ${EXAMPLE_ROOT}/Example.Managed/Example.Managed-Static.csproj
-            Coral.Managed
-        WORKING_DIRECTORY ${EXAMPLE_ROOT}/Example.Managed
-        COMMENT "Building Example.Managed"
-        VERBATIM
-        COMMAND ${DOTNET_EXE} build ${EXAMPLE_ROOT}/Example.Managed/Example.Managed-Static.csproj
-                --configuration $<CONFIG>
-                --output ${EXAMPLE_OUTPUT_DIR}
-        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/Example.Managed.dll.stamp
-    )
-
-    add_custom_target(Example.Managed
-        DEPENDS ${CMAKE_BINARY_DIR}/Example.Managed.dll.stamp
+    add_dotnet_library(Example.Managed
+        CSPROJ ${EXAMPLE_ROOT}/Example.Managed/Example.Managed-Static.csproj
+        OUTPUT_DIR ${EXAMPLE_OUTPUT_DIR}
+        DEPENDS Coral.Managed
     )
 
     # Example.Native executable
@@ -280,19 +257,8 @@ if(CORAL_EXAMPLE)
         )
     endif()
 
-    # Copy Coral.Managed output to Example output directory
-    add_custom_command(TARGET Example.Native POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.dll
-            ${EXAMPLE_OUTPUT_DIR}/Coral.Managed.dll
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.deps.json
-            ${EXAMPLE_OUTPUT_DIR}/Coral.Managed.deps.json
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.runtimeconfig.json
-            ${EXAMPLE_OUTPUT_DIR}/Coral.Managed.runtimeconfig.json
-        COMMENT "Copying Coral.Managed to Example output directory"
-    )
+    # Copy Coral.Managed to Example output directory
+    dotnet_copy_to_target(Coral.Managed Example.Native)
 endif()
 
 #------------------------------------------------------------------------------
@@ -303,25 +269,10 @@ if(CORAL_TESTING)
     set(TESTING_OUTPUT_DIR ${CMAKE_BINARY_DIR}/Build/$<CONFIG>/Tests)
 
     # Testing.Managed
-    file(GLOB TESTING_MANAGED_SRC CONFIGURE_DEPENDS ${TESTING_ROOT}/Testing.Managed/Source/*.cs)
-
-    add_custom_command(
-        OUTPUT ${CMAKE_BINARY_DIR}/Testing.Managed.dll.stamp
-        DEPENDS
-            ${TESTING_MANAGED_SRC}
-            ${TESTING_ROOT}/Testing.Managed/Testing.Managed-Static.csproj
-            Coral.Managed
-        WORKING_DIRECTORY ${TESTING_ROOT}/Testing.Managed
-        COMMENT "Building Testing.Managed"
-        VERBATIM
-        COMMAND ${DOTNET_EXE} build ${TESTING_ROOT}/Testing.Managed/Testing.Managed-Static.csproj
-                --configuration $<CONFIG>
-                --output ${TESTING_OUTPUT_DIR}
-        COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/Testing.Managed.dll.stamp
-    )
-
-    add_custom_target(Testing.Managed
-        DEPENDS ${CMAKE_BINARY_DIR}/Testing.Managed.dll.stamp
+    add_dotnet_library(Testing.Managed
+        CSPROJ ${TESTING_ROOT}/Testing.Managed/Testing.Managed-Static.csproj
+        OUTPUT_DIR ${TESTING_OUTPUT_DIR}
+        DEPENDS Coral.Managed
     )
 
     # Testing.Native executable
@@ -374,19 +325,8 @@ if(CORAL_TESTING)
         )
     endif()
 
-    # Copy Coral.Managed output to Testing output directory
-    add_custom_command(TARGET Testing.Native POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.dll
-            ${TESTING_OUTPUT_DIR}/Coral.Managed.dll
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.deps.json
-            ${TESTING_OUTPUT_DIR}/Coral.Managed.deps.json
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CORAL_MANAGED_OUTPUT_DIR}/Coral.Managed.runtimeconfig.json
-            ${TESTING_OUTPUT_DIR}/Coral.Managed.runtimeconfig.json
-        COMMENT "Copying Coral.Managed to Testing output directory"
-    )
+    # Copy Coral.Managed to Testing output directory
+    dotnet_copy_to_target(Coral.Managed Testing.Native)
 
     # Enable CTest
     enable_testing()
@@ -478,15 +418,6 @@ install(FILES
     DESTINATION ${CORAL_INSTALL_CONFIGDIR}
 )
 
-# Install managed assemblies
-install(FILES
-    ${CMAKE_BINARY_DIR}/Build/$<CONFIG>/Coral.Managed.dll
-    ${CMAKE_BINARY_DIR}/Build/$<CONFIG>/Coral.Managed.deps.json
-    ${CMAKE_BINARY_DIR}/Build/$<CONFIG>/Coral.Managed.runtimeconfig.json
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/Coral/Managed
-    OPTIONAL
-)
-
 # Export build tree targets (for use without installing)
 export(EXPORT CoralTargets
     FILE ${CMAKE_CURRENT_BINARY_DIR}/CoralTargets.cmake
@@ -496,9 +427,12 @@ export(EXPORT CoralTargets
 # Register package in user's package registry (optional)
 export(PACKAGE Coral)
 
-
+#------------------------------------------------------------------------------
+# Summary
+#------------------------------------------------------------------------------
 message(STATUS "")
 message(STATUS "Coral Configuration Summary:")
+message(STATUS "  Version:        ${PROJECT_VERSION}")
 message(STATUS "  Build Type:     ${CMAKE_BUILD_TYPE}")
 message(STATUS "  .NET SDK:       ${DOTNET_SDKVER}")
 message(STATUS "  .NET Runtime:   ${DOTNET_RTVER}")

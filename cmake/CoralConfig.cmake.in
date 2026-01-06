@@ -44,10 +44,10 @@ set(CORAL_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
 set(CORAL_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
 
 # Path to installed include directory
-set_and_check(CORAL_INCLUDE_DIR "@PACKAGE_CMAKE_INSTALL_INCLUDEDIR@")
+set_and_check(CORAL_INCLUDE_DIR "@PACKAGE_CORAL_INSTALL_INCLUDEDIR@")
 
 # Path to installed library directory
-set_and_check(CORAL_LIBRARY_DIR "@PACKAGE_CMAKE_INSTALL_LIBDIR@")
+set_and_check(CORAL_LIBRARY_DIR "@PACKAGE_CORAL_INSTALL_LIBDIR@")
 
 # Indicate that package was found
 set(Coral_FOUND TRUE)

@@ -144,13 +144,16 @@ file(GLOB CORAL_NATIVE_HEADERS
 
 target_sources(Coral.Native
     PRIVATE ${CORAL_NATIVE_SOURCES}
-    PUBLIC ${CORAL_NATIVE_HEADERS}
+    PRIVATE ${CORAL_NATIVE_HEADERS}
 )
 
-# Include directories
+# Include directories - use generator expressions for proper install/build separation
 target_include_directories(Coral.Native
-    PUBLIC ${CORAL_ROOT}/Coral.Native/Include
-    PRIVATE ${CORAL_ROOT}/Coral.Native/Source
+    PUBLIC
+        $<BUILD_INTERFACE:${CORAL_ROOT}/Coral.Native/Include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${CORAL_ROOT}/Coral.Native/Source
 )
 
 # External include directories (system includes to suppress warnings)
@@ -422,6 +425,8 @@ include(CMakePackageConfigHelpers)
 
 # Set installation directories
 set(CORAL_INSTALL_CONFIGDIR ${CMAKE_INSTALL_LIBDIR}/cmake/Coral)
+set(CORAL_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+set(CORAL_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
 
 # Install the native library
 install(TARGETS Coral.Native
@@ -463,7 +468,7 @@ configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/CoralConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/CoralConfig.cmake
     INSTALL_DESTINATION ${CORAL_INSTALL_CONFIGDIR}
-    PATH_VARS CMAKE_INSTALL_INCLUDEDIR CMAKE_INSTALL_LIBDIR
+    PATH_VARS CORAL_INSTALL_INCLUDEDIR CORAL_INSTALL_LIBDIR
 )
 
 # Install config files

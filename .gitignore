@@ -25,3 +25,4 @@ cmake-build-*
 Makefile
 
 *.code-workspace
+__cmake_systeminformation/AllMacros.txt

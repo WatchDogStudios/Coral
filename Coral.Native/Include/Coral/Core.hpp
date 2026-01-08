@@ -15,9 +15,13 @@
 #define CORAL_LEAK_UC_TYPES_MSG_P(x) CORAL_DEPRECATE_MSG_P(CORAL_LEAK_UC_TYPES_MSG, #x)
 
 #ifdef _WIN32
+#ifndef CORAL_WINDOWS
 	#define CORAL_WINDOWS
+#endif
 #elif defined(__APPLE__)
+#ifndef CORAL_APPLE
 	#define CORAL_APPLE
+#endif
 #endif
 
 #ifdef CORAL_WINDOWS

@@ -6,13 +6,140 @@
 #include "HostFXRErrorCodes.hpp"
 #include "CoralManagedFunctions.hpp"
 
+#include <cstdlib>   // setenv / _putenv_s
+#include <string>
+#include <thread>
+
 #ifdef CORAL_WINDOWS
-	#include <ShlObj_core.h>
+	#include <ShlObj_core.h>  // pulls in <windows.h> for SetEnvironmentVariableA, WaitNamedPipeA, GetCurrentProcessId
 #else
 	#include <dlfcn.h>
+	#include <sys/types.h>
+	#include <unistd.h>       // getpid
 #endif
 
 namespace Coral {
+
+	// ---------------------------------------------------------------
+	// Helpers for the external-debugger-attach support added to
+	// HostSettings. Kept in this TU's anonymous namespace because they
+	// only matter at Initialize time and have no public surface.
+	// ---------------------------------------------------------------
+	namespace {
+
+		// Set a process-level env var WITHOUT overwriting an existing
+		// value. We want this behavior so a developer who explicitly
+		// disabled diagnostics for a perf-test run (DOTNET_EnableDiagnostics=0
+		// in their shell) still wins; we only fill in the unset case.
+		void SetEnvIfUnset(const char* name, const char* value)
+		{
+#ifdef CORAL_WINDOWS
+			// GetEnvironmentVariableA returns 0 + sets ERROR_ENVVAR_NOT_FOUND
+			// when the variable doesn't exist. _putenv_s + SetEnvironmentVariableA
+			// both work; we use SetEnvironmentVariableA so the value is
+			// visible to subsequent SDK / hostfxr / runtime queries via
+			// GetEnvironmentVariableA, which is what they use internally.
+			char buf[8];
+			DWORD got = GetEnvironmentVariableA(name, buf, sizeof(buf));
+			if (got == 0)  // not set
+			{
+				SetEnvironmentVariableA(name, value);
+			}
+#else
+			setenv(name, value, /*overwrite=*/0);
+#endif
+		}
+
+		// Force-enable the .NET diagnostics IPC + debugger + profiler
+		// subsystems. Called before hostfxr loads the runtime, because
+		// the CLR reads these during Debugger::Startup which fires
+		// during hostfxr_initialize_for_runtime_config - setting them
+		// after that is a no-op.
+		//
+		// All four default to "1" in a stock runtime, but some hosting
+		// contexts (corporate-policy GPOs, IIS-style hosts, certain CI
+		// runners that proxy through a launcher) inherit "0" from their
+		// parent process. Setting them here makes the embed's
+		// debuggability invariant under the parent's environment.
+		void EnableDotnetDiagnosticsEnv()
+		{
+			SetEnvIfUnset("DOTNET_EnableDiagnostics",          "1");
+			SetEnvIfUnset("DOTNET_EnableDiagnostics_IPC",      "1");
+			SetEnvIfUnset("DOTNET_EnableDiagnostics_Debugger", "1");
+			SetEnvIfUnset("DOTNET_EnableDiagnostics_Profiler", "1");
+		}
+
+		// Poll for the existence of the .NET diagnostic IPC pipe.
+		// Returns true if the pipe came up within `timeout`, false on
+		// timeout (silent - caller decides whether to log).
+		//
+		// The pipe naming convention is documented in
+		// dotnet/diagnostics:
+		//   Windows: \\.\pipe\dotnet-diagnostic-<pid>
+		//   POSIX:   ${TMPDIR:-/tmp}/dotnet-diagnostic-<pid>-<start_time>-socket
+		//
+		// On Windows we use WaitNamedPipeA with a 0ms wait per probe so
+		// we get an immediate "exists?" answer without consuming a
+		// server instance. ERROR_PIPE_BUSY and ERROR_SEM_TIMEOUT both
+		// mean "pipe is up, just couldn't open a new client" - those
+		// count as success for our purposes.
+		bool WaitForDiagnosticPipeUp(std::chrono::milliseconds timeout)
+		{
+#ifdef CORAL_WINDOWS
+			const std::string pipeName =
+				std::string("\\\\.\\pipe\\dotnet-diagnostic-") +
+				std::to_string(static_cast<unsigned long>(GetCurrentProcessId()));
+
+			const auto deadline = std::chrono::steady_clock::now() + timeout;
+			for (;;)
+			{
+				if (WaitNamedPipeA(pipeName.c_str(), 0))
+				{
+					return true;  // a free server instance exists
+				}
+				const DWORD err = GetLastError();
+				if (err == ERROR_PIPE_BUSY || err == ERROR_SEM_TIMEOUT)
+				{
+					return true;  // pipe exists, just busy with someone else
+				}
+				if (std::chrono::steady_clock::now() >= deadline)
+				{
+					return false;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(25));
+			}
+#else
+			// POSIX: the runtime drops a Unix domain socket at
+			// $TMPDIR/dotnet-diagnostic-<pid>-<starttime>-socket. We
+			// just look for any path matching the prefix; we don't
+			// connect to it.
+			const char* tmpdir = std::getenv("TMPDIR");
+			if (tmpdir == nullptr || *tmpdir == '\0') tmpdir = "/tmp";
+			const std::string prefix =
+				std::string("dotnet-diagnostic-") +
+				std::to_string(static_cast<long>(getpid())) + "-";
+
+			const auto deadline = std::chrono::steady_clock::now() + timeout;
+			for (;;)
+			{
+				std::error_code ec;
+				for (auto& entry : std::filesystem::directory_iterator(tmpdir, ec))
+				{
+					if (!entry.is_socket(ec)) continue;
+					const auto& name = entry.path().filename().string();
+					if (name.rfind(prefix, 0) == 0) return true;
+				}
+				if (std::chrono::steady_clock::now() >= deadline)
+				{
+					return false;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(25));
+			}
+#endif
+		}
+
+	} // anonymous namespace
+
 
 	struct CoreCLRFunctions
 	{
@@ -57,18 +184,27 @@ namespace Coral {
 	{
 		CORAL_VERIFY(!m_Initialized);
 
-		if (!LoadHostFXR())
-		{
-			return CoralInitStatus::DotNetNotFound;
-		}
-
-		// Setup settings
+		// Setup settings (moved up so EnableManagedDebugger is consulted
+		// BEFORE LoadHostFXR - the CLR reads DOTNET_EnableDiagnostics*
+		// during Debugger::Startup which runs inside
+		// hostfxr_initialize_for_runtime_config; setting them after
+		// LoadHostFXR is too late.)
 		m_Settings = std::move(InSettings);
 
 		if (!m_Settings.MessageCallback)
 			m_Settings.MessageCallback = DefaultMessageCallback;
 		MessageCallback = m_Settings.MessageCallback;
 		MessageFilter = m_Settings.MessageFilter;
+
+		if (m_Settings.EnableManagedDebugger)
+		{
+			EnableDotnetDiagnosticsEnv();
+		}
+
+		if (!LoadHostFXR())
+		{
+			return CoralInitStatus::DotNetNotFound;
+		}
 
 		s_CoreCLRFunctions.SetHostFXRErrorWriter([](const UCChar* InMessage)
 		{
@@ -87,6 +223,28 @@ namespace Coral {
 		if (!InitializeCoralManaged())
 		{
 			return CoralInitStatus::CoralManagedInitError;
+		}
+
+		// After the runtime is up and the first managed call has fired
+		// (inside InitializeCoralManaged), the diagnostic IPC server
+		// thread still needs a moment to publish its named pipe / Unix
+		// socket. If we return from Initialize before that publish, any
+		// debugger attach probed during the gap gets E_INVALIDARG. The
+		// wait is bounded + silent so we never deadlock startup.
+		if (m_Settings.EnableManagedDebugger && m_Settings.WaitForDiagnosticPipe)
+		{
+			if (!WaitForDiagnosticPipeUp(m_Settings.DiagnosticPipeWaitTimeout))
+			{
+				// Not fatal - debugger attach often still works without
+				// the IPC pipe (it's used by dotnet-counters/-trace/-dump,
+				// not by vsdbg's ICorDebug attach itself), but log so
+				// debug-attach failures correlate with the missing pipe
+				// in the user's editor log.
+				MessageCallback(
+					"[Coral] diagnostic IPC pipe didn't appear within timeout; "
+					"external managed-debugger attach may need a retry.",
+					MessageLevel::Warning);
+			}
 		}
 
 		return CoralInitStatus::Success;
@@ -262,6 +420,24 @@ namespace Coral {
 
 			std::filesystem::path coralDirectoryPath = m_Settings.CoralDirectory;
 			s_CoreCLRFunctions.SetRuntimePropertyValue(m_HostFXRContext, CORAL_STR("APP_CONTEXT_BASE_DIRECTORY"), coralDirectoryPath.c_str());
+
+			if (m_Settings.EnableManagedDebugger)
+			{
+				// Force-enable MetadataUpdater regardless of what the
+				// runtimeconfig.json says. The SDK defaults this to false
+				// for Release/Profile builds of class libraries, which
+				// silently disables parts of Debugger::Startup's EnC
+				// sync and causes ICorDebug::DebugActiveProcess to
+				// return E_INVALIDARG from external attach attempts.
+				// Setting it as a runtime property here overrides the
+				// runtimeconfig value, so this works even when paired
+				// with a stock Coral.Managed-Static.csproj (no
+				// RuntimeHostConfigurationOption needed).
+				s_CoreCLRFunctions.SetRuntimePropertyValue(
+					m_HostFXRContext,
+					CORAL_STR("System.Reflection.Metadata.MetadataUpdater.IsSupported"),
+					CORAL_STR("true"));
+			}
 
 			status = s_CoreCLRFunctions.GetRuntimeDelegate(m_HostFXRContext, hdt_load_assembly_and_get_function_pointer, (void**) &s_CoreCLRFunctions.GetManagedFunctionPtr);
 			CORAL_VERIFY(status == StatusCode::Success);

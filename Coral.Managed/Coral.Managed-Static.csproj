@@ -12,6 +12,40 @@
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 	</PropertyGroup>
 
+	<!--
+		RuntimeHostConfigurationOption entries are emitted into the
+		generated Coral.Managed.runtimeconfig.json under
+		runtimeOptions.configProperties. The host (hostfxr) reads them
+		while bringing the CLR up and uses them as feature gates.
+
+		MetadataUpdater.IsSupported = true:
+			SDK-default for Release/Profile builds of class libraries is
+			FALSE, which disables hot-reload + Edit-and-Continue support
+			in the runtime. That sounds harmless for a "we don't use hot
+			reload" embed, BUT the Debugger::Startup path in .NET 8+
+			gates parts of its EnC sync on this flag. When false, some
+			external-debugger handshake paths short-circuit and
+			ICorDebug::DebugActiveProcess returns E_INVALIDARG (which
+			surfaces in VS Code / Rider / Visual Studio as
+			"Failed to attach to process:" with no detail).
+
+			Forcing true gives us:
+				- Working managed-debugger attach from any IDE
+				- Hot-reload support if we ever wire it up on top of
+				  the AssemblyLoadContext unload/reload that's already
+				  here
+				- Edit-and-Continue inside the debugger
+
+			There's no downside for an in-process embed: the runtime
+			only acts on hot-reload events if something actually sends
+			them, and Coral doesn't send them unless asked.
+	-->
+	<ItemGroup>
+		<RuntimeHostConfigurationOption
+			Include="System.Reflection.Metadata.MetadataUpdater.IsSupported"
+			Value="true" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<Folder Include="Source\"/>
 	</ItemGroup>

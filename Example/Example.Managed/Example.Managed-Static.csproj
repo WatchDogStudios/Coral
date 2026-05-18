@@ -12,6 +12,20 @@
 		<EnableDynamicLoading>true</EnableDynamicLoading>
 	</PropertyGroup>
 
+	<!-- Match Coral.Managed-Static.csproj: Debug-mode settings tuned
+	     for external managed-debugger attach. See sibling for full
+	     rationale (short: DebugType=full + loose-on-disk assemblies
+	     fix E_INVALIDARG from ICorDebug attach against the embedded
+	     CoreCLR). -->
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+		<Optimize>false</Optimize>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>full</DebugType>
+		<!-- Force assemblies to stay loose on disk for the debugger -->
+		<PublishSingleFile>false</PublishSingleFile>
+		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<Folder Include="Source\"/>
 	</ItemGroup>

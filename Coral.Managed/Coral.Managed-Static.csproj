@@ -46,6 +46,27 @@
 			Value="true" />
 	</ItemGroup>
 
+	<!--
+		Debug-mode build settings tuned for external managed-debugger
+		attach. When Coral hosts the CLR inside a native process,
+		vsdbg / Rider / Visual Studio's ICorDebug attach handshake
+		rejected portable PDBs with E_INVALIDARG from
+		DebugActiveProcess - the runtime is fine, the IPC is fine, but
+		the metadata negotiation around portable PDBs in delegate-host
+		mode wedges the attach. Forcing DebugType=full for Debug builds
+		plus loose-on-disk assemblies fixed it for all three IDEs.
+		Profile/Release keep portable PDBs (they're cheaper) since
+		those configs don't expect external-debugger attach.
+	-->
+	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+		<Optimize>false</Optimize>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>full</DebugType>
+		<!-- Force assemblies to stay loose on disk for the debugger -->
+		<PublishSingleFile>false</PublishSingleFile>
+		<EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<Folder Include="Source\"/>
 	</ItemGroup>
